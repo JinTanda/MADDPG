@@ -5,6 +5,7 @@ import os
 import tensorflow as tf
 import time
 import pickle
+import matplotlib.pyplot as plt
 
 import maddpg.common.tf_util as U
 from maddpg.trainer.maddpg import MADDPGAgentTrainer
@@ -16,7 +17,7 @@ def parse_args():
     parser.add_argument("--scenario", type=str, default="simple", help="name of the scenario script")
     parser.add_argument("--max-episode-len", type=int, default=25, help="maximum episode length")
     parser.add_argument("--num-episodes", type=int, default=60000, help="number of episodes")
-    parser.add_argument("--num-adversaries", type=int, default=3, help="number of adversaries")
+    parser.add_argument("--num-adversaries", type=int, default=4, help="number of adversaries")
     parser.add_argument("--good-policy", type=str, default="maddpg", help="policy for good agents")
     parser.add_argument("--adv-policy", type=str, default="maddpg", help="policy of adversaries")
     # Core training parameters
@@ -108,6 +109,10 @@ def train(arglist):
         train_step = 0
         t_start = time.time()
 
+        agents_rewards_list = []
+        adv_rewards_list = [[] for i in range(num_adversaries)]
+        first_show = True
+
         print('Starting iterations...')
         while True:
             # get action
@@ -149,8 +154,8 @@ def train(arglist):
                     break
                 continue
 
-            if train_step % 10000 < 50:
-                env.render()
+            # if train_step % 10000 < 50:
+            #     env.render()
 
             # for displaying learned policies
             if arglist.display:
@@ -173,9 +178,21 @@ def train(arglist):
                     print("steps: {}, episodes: {}, mean episode reward: {}, time: {}".format(
                         train_step, len(episode_rewards), np.mean(episode_rewards[-arglist.save_rate:]), round(time.time()-t_start, 3)))
                 else:
+                    agents_rewards_list.append(np.mean(episode_rewards[-arglist.save_rate:]))
+                    for i in range(num_adversaries):
+                        adv_rewards_list[i].append(np.mean(agent_rewards[i][-arglist.save_rate:]))
                     print("steps: {}, episodes: {}, mean episode reward: {}, agent episode reward: {}, time: {}".format(
                         train_step, len(episode_rewards), np.mean(episode_rewards[-arglist.save_rate:]),
                         [np.mean(rew[-arglist.save_rate:]) for rew in agent_rewards], round(time.time()-t_start, 3)))
+
+                    # agent_line.set_data(agents_rewards)
+                    plt.plot(agents_rewards_list,label='agent_reward')
+                    for i,rew_list, in enumerate(adv_rewards_list):
+                        plt.plot(rew_list,label='adv_reward{0}'.format(i))
+                    if first_show:
+                        first_show = False
+                        plt.legend()
+                    plt.pause(.01)
                 t_start = time.time()
                 # Keep track of final episode reward
                 final_ep_rewards.append(np.mean(episode_rewards[-arglist.save_rate:]))
@@ -191,7 +208,9 @@ def train(arglist):
                 with open(agrew_file_name, 'wb') as fp:
                     pickle.dump(final_ep_ag_rewards, fp)
                 print('...Finished total of {} episodes.'.format(len(episode_rewards)))
+                plt.savefig('reward_graph.png')
                 break
+        
 
 if __name__ == '__main__':
     arglist = parse_args()
